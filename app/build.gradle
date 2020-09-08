@@ -1,0 +1,184 @@
+
+apply plugin: "com.android.application"
+
+apply from: "jacoco.gradle"
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
+apply plugin: "kotlin-allopen"
+
+// dependencies -------------------------------------------------
+dependencies {
+    // Compile Build Dependencies
+    implementation fileTree(include: ["*.jar"], dir: "libs")
+    implementation 'com.google.android.material:material:1.2.1'
+    implementation 'androidx.preference:preference:1.1.1'
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+    implementation 'androidx.annotation:annotation:1.1.0'
+    implementation 'androidx.collection:collection:1.1.0'
+    implementation 'androidx.core:core-ktx:1.3.1'
+    implementation 'androidx.media:media:1.1.0'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation 'com.jjoe64:graphview:4.2.2'
+    // Unit Test Dependencies
+    testImplementation 'junit:junit:4.13'
+    testImplementation 'org.mockito:mockito-core:3.4.6'
+    testImplementation 'com.googlecode.junit-toolbox:junit-toolbox:2.4'
+    testImplementation 'org.robolectric:robolectric:4.3.1'
+    testImplementation 'androidx.test.ext:junit:1.1.2'
+    testImplementation "org.jetbrains.kotlin:kotlin-test:$kotlin_version"
+    testImplementation "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
+    testImplementation 'com.nhaarman.mockitokotlin2:mockito-kotlin:2.2.0'
+    // Android Test Dependencies
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.3.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.2'
+    androidTestImplementation 'androidx.test:rules:1.3.0'
+}
+
+android {
+    compileSdkVersion 29
+    buildToolsVersion "29.0.3"
+
+    sourceSets.each {
+        it.java.srcDirs += "src/$it.name/kotlin"
+    }
+
+    defaultConfig {
+        applicationId "com.sladjan.wifianalyzer"
+        minSdkVersion 19
+        targetSdkVersion 29
+        versionCode 221
+        versionName "2.2.1"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        viewBinding = true
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android.txt")
+            signingConfig
+        }
+        debug {
+            minifyEnabled false
+            shrinkResources false
+            debuggable true
+            testCoverageEnabled true
+        }
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources true
+            all {
+                testLogging {
+                    events "passed", "skipped", "failed", "standardOut", "standardError"
+                    outputs.upToDateWhen { false }
+                    showStandardStreams = true
+                }
+            }
+        }
+    }
+
+    lintOptions {
+        disable "GoogleAppIndexingWarning"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+}
+
+allOpen {
+    annotation("com.sladjan.annotation.OpenClass")
+}
+
+// keystore -------------------------------------------------
+/*if (project.hasProperty("keyAlias")) {
+    def propertiesFile = file("../../keystores/androidkeystore.properties")
+    Properties properties = readProperties(propertiesFile)
+
+    System.out.println(">>> Signing Config " + properties)
+    android.buildTypes.release.signingConfig.keyAlias = properties["key_alias"].toString()
+    android.buildTypes.release.signingConfig.keyPassword = properties["key_password"].toString()
+    android.buildTypes.release.signingConfig.storeFile = file(properties["store_filename"].toString())
+    android.buildTypes.release.signingConfig.storePassword = properties["store_password"].toString()
+}*/
+
+// version -------------------------------------------------
+//updateVersion()
+
+def updateVersion() {
+    def propertiesFile = file("build.properties")
+    Properties properties = readProperties(propertiesFile)
+
+    def versionMajor = properties["version_major"].toString().toInteger()
+    def versionMinor = properties["version_minor"].toString().toInteger()
+    def versionPatch = properties["version_patch"].toString().toInteger()
+    def versionBuild = properties["version_build"].toString().toInteger()
+    def versionStore = properties["version_store"].toString().toInteger()
+
+    if (isReleaseTask()) {
+        System.out.println(">>> Building Release...")
+        versionPatch++
+        versionStore++
+        versionBuild = 0
+        properties["version_patch"] = versionPatch.toString()
+        properties["version_store"] = versionStore.toString()
+        properties["version_build"] = versionBuild.toString()
+        writeProperties(propertiesFile, properties)
+    }
+    if (isCompileTask()) {
+        System.out.println(">>> Compiling Source...")
+        versionBuild++
+        properties["version_build"] = versionBuild.toString()
+        writeProperties(propertiesFile, properties)
+    }
+
+    def versionName = "${versionMajor}.${versionMinor}.${versionPatch}"
+    def applicationId = android.defaultConfig.applicationId
+    if (!isReleaseTask()) {
+        versionName = versionName + ".${versionBuild}"
+        applicationId = applicationId + android.buildTypes.debug.applicationIdSuffix
+    }
+    System.out.println(">>> " + project.parent.name + " " + versionName + " (" + versionStore + ") " + applicationId)
+    android.defaultConfig.versionCode = versionStore
+    android.defaultConfig.versionName = versionName
+}
+
+def isCompileTask() {
+    def tasks = gradle.getStartParameter().getTaskNames()
+    return ":app:generateDebugSources" in tasks || ":app:generateReleaseSources" in tasks ||
+            "generateDebugSources" in tasks || "generateReleaseSources" in tasks
+}
+
+def isReleaseTask() {
+    def tasks = gradle.getStartParameter().getTaskNames()
+    return ":app:assembleRelease" in tasks || "assembleRelease" in tasks ||
+            ":app:bundleRelease" in tasks || "bundleRelease" in tasks
+}
+
+static Properties readProperties(propertiesFile) {
+    if (propertiesFile.canRead()) {
+        Properties properties = new Properties()
+        def inputStream = new FileInputStream(propertiesFile)
+        properties.load(inputStream)
+        inputStream.close()
+        return properties
+    } else {
+        def message = ">>> Could not read " + propertiesFile.name + " file!"
+        System.err.println(message)
+        throw new GradleException(message)
+    }
+}
+
+def static writeProperties(propertiesFile, properties) {
+    def writer = propertiesFile.newWriter()
+    properties.store(writer, "Build Properties")
+    writer.close()
+}
